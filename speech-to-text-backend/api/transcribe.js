@@ -1,6 +1,5 @@
 const fs = require("fs");
 const multer = require("multer");
-const util = require("util");
 
 export const config = {
   api: {
@@ -8,7 +7,6 @@ export const config = {
   },
 };
 
-// Fix for Vercel: /tmp/ must end with slash
 const upload = multer({ dest: "/tmp/" });
 const uploadMiddleware = upload.single("audio");
 
@@ -23,16 +21,15 @@ function runMiddleware(req, res, fn) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
   if (!ASSEMBLYAI_API_KEY) {
-    return res.status(500).json({ error: "Missing AssemblyAI API key" });
+    return res.status(500).json({ error: "Missing API key" });
   }
 
   try {
-    // Run multer to parse FormData
     await runMiddleware(req, res, uploadMiddleware);
 
     if (!req.file) {
@@ -41,11 +38,16 @@ export default async function handler(req, res) {
 
     const filePath = req.file.path;
 
-    // ---- 1. Upload to AssemblyAI ----
+    // ------------------------------------
+    // 1. Upload audio stream to AssemblyAI
+    // ------------------------------------
     const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
       method: "POST",
-      headers: { authorization: ASSEMBLYAI_API_KEY },
+      headers: {
+        authorization: ASSEMBLYAI_API_KEY,
+      },
       body: fs.createReadStream(filePath),
+      duplex: "half", // << REQUIRED FIX
     });
 
     const uploadData = await uploadRes.json();
@@ -55,7 +57,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Upload to AssemblyAI failed" });
     }
 
-    // ---- 2. Request transcription ----
+    // ------------------------------------
+    // 2. Request transcription
+    // ------------------------------------
     const trRes = await fetch("https://api.assemblyai.com/v2/transcript", {
       method: "POST",
       headers: {
@@ -68,34 +72,34 @@ export default async function handler(req, res) {
     const trData = await trRes.json();
     const trId = trData.id;
 
-    // ---- 3. Poll for completion ----
-    let finalText = "";
+    // ------------------------------------
+    // 3. Poll for completion
+    // ------------------------------------
     let status = trData.status;
+    let finalText = "";
 
     for (let i = 0; i < 15 && status !== "completed" && status !== "failed"; i++) {
       await new Promise((r) => setTimeout(r, 2000));
 
-      const check = await fetch(`https://api.assemblyai.com/v2/transcript/${trId}`, {
+      const checkRes = await fetch(`https://api.assemblyai.com/v2/transcript/${trId}`, {
         headers: { authorization: ASSEMBLYAI_API_KEY },
       });
 
-      const cd = await check.json();
-      status = cd.status;
-      finalText = cd.text || "";
+      const checkData = await checkRes.json();
+      status = checkData.status;
+      finalText = checkData.text || "";
     }
 
-    // Cleanup
-    try { fs.unlinkSync(filePath); } catch (e) {}
+    try { fs.unlinkSync(filePath); } catch {}
 
     if (status === "failed") {
-      return res.status(500).json({ error: "AssemblyAI failed to transcribe." });
+      return res.status(500).json({ error: "Transcription failed" });
     }
 
     if (status !== "completed") {
-      return res.status(504).json({ error: "Transcription timed out." });
+      return res.status(504).json({ error: "Transcription timeout" });
     }
 
-    // ---- 4. SUCCESS ----
     return res.status(200).json({ text: finalText });
 
   } catch (err) {
