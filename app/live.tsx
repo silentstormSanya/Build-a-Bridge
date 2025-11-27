@@ -8,7 +8,8 @@ export default function Live() {
   const [isUploading, setIsUploading] = useState(false);
 
   // ⚠️ Update this to your local IP
-  const TRANSCRIBE_URL = "http://192.168.2.20/transcribe";
+  const TRANSCRIBE_URL = "https://build-a-bridge2.vercel.app/api/transcribe";
+
 
   async function startRecording() {
     try {
