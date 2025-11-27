@@ -7,8 +7,9 @@ export default function Live() {
   const [transcript, setTranscript] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
-  // ⚠️ Update this to your local IP
-  const TRANSCRIBE_URL = "https://build-a-bridge2.vercel.app/api/transcribe";
+  // ⚠️ Ensure this is your CORRECT and LIVE Vercel URL!
+  // Based on your deployment, this should be:
+  const TRANSCRIBE_URL = "https://build-a-bridge-backend.vercel.app/server"; 
 
 
   async function startRecording() {
@@ -32,6 +33,9 @@ export default function Live() {
   }
 
   async function stopRecording() {
+    // Check if recording is active before attempting to stop
+    if (!recording) return;
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -47,19 +51,30 @@ export default function Live() {
         type: "audio/m4a",
       });
 
+      // --- FETCH REQUEST WITH IMPROVED ERROR HANDLING ---
       const res = await fetch(TRANSCRIBE_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        // NOTE: Do not manually set 'Content-Type' for FormData, fetch handles it.
         body: formData,
       });
 
+      // CHECK FOR NON-SUCCESS STATUS (4xx or 5xx)
+      if (!res.ok) {
+        // Read the raw text response for better debugging
+        const errorText = await res.text();
+        console.error("Server Response Error:", res.status, errorText);
+        setTranscript(`Server Error (${res.status}): ${errorText.substring(0, 50)}...`);
+        return; // Exit function on error
+      }
+
+      // ONLY parse as JSON if the response status is OK (200)
       const data = await res.json();
       setTranscript(data.text || "(empty)");
+
     } catch (err) {
+      // Catch network errors, JSON parsing errors, etc.
       console.error("Stop recording error:", err);
-      setTranscript("Transcription failed.");
+      setTranscript("Transcription failed. (Check console for error details)");
     } finally {
       setIsUploading(false);
     }
@@ -80,6 +95,7 @@ export default function Live() {
       <Button
         title={recording ? "Stop Recording" : "Start Recording"}
         onPress={recording ? stopRecording : startRecording}
+        disabled={isUploading} // Disable buttons while uploading
       />
     </View>
   );
