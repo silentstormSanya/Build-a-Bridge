@@ -9,7 +9,7 @@ export default function Live() {
 
   // ⚠️ Ensure this is your CORRECT and LIVE Vercel URL!
   // Based on your deployment, this should be:
-  const TRANSCRIBE_URL = "https://build-a-bridge-backend.vercel.app/server"; 
+  const TRANSCRIBE_URL = "https://build-a-bridge-backend.vercel.app/api/transcribe";
 
 
   async function startRecording() {
